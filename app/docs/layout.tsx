@@ -1,6 +1,6 @@
 // app/docs/layout.tsx
 import { Footer, Layout, Navbar } from "nextra-theme-docs";
-import { Banner, Head } from "nextra/components";
+import { Banner } from "nextra/components";
 import { getPageMap } from "nextra/page-map";
 
 const banner = (
@@ -25,8 +25,6 @@ export default async function DocsLayout({
 }) {
   return (
     <>
-      <Head>{/* Specific Head tags for Docs go here if needed */}</Head>
-
       <Layout
         banner={banner}
         navbar={navbar}
