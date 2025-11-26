@@ -1,0 +1,183 @@
+import { Callout } from "nextra/components";
+
+# Tables
+
+**Automatic Table Creation, Syncing & Typed Access.**
+
+Lazy Appwrite provides a zero-setup table system that automatically:
+
+- Creates tables on demand.
+- Syncs permissions, row-security, and enabled status.
+- Cleans & validates data **before** it reaches Appwrite.
+- Performs concurrency-safe lazy initialization.
+- Provides a typed API for CRUD and querying.
+
+This documentation covers the two core classes powering the system:
+
+1. **TableManager** — Handles creation & structure syncing.
+2. **LazyTable** — The developer-facing model with validation & automatic lazy creation.
+
+---
+
+## Architecture Overview
+
+Every table in Lazy Appwrite is defined by a strict `TableSchema`.
+
+```ts
+interface TableSchema {
+  id: string;
+  name: string;
+  permissions?: string[];
+  rowSecurity?: boolean;
+  enabled?: boolean;
+  columns: ColumnSchema[];
+}
+```
+
+Lazy Appwrite uses this schema to:
+
+- **Auto-create** the table if it is missing.
+- **Enforce** configuration drift rules (e.g., permissions changed).
+- **Validate** payloads before insert/update.
+- **Prevent** unknown "ghost" fields.
+- **Convert** values (e.g., `String` → `Number`, `Scalar` → `Array`).
+
+---
+
+## TableManager: Syncing & Structure
+
+The `TableManager` class ensures the table exists in the cloud and matches your local schema.
+
+### Responsibilities
+
+- Checks if the table exists.
+- Creates it if missing.
+- Detects **Drifts**.
+- Detects **Row-Security** or **Enabled-Status** changes.
+- Updates table settings if the local schema definition changes.
+- Retries automatically on network errors using `withRetry`.
+
+### Drift Detection Logic
+
+When syncing, the manager fetches the remote table:
+
+```ts
+const remoteTable = await databases.getTable({...});
+```
+
+Then it compares local vs. remote:
+
+1. **Permissions:**
+
+```ts
+local.permissions.sort().join(",") !== remote.$permissions.sort().join(",");
+```
+
+2. **Row Security:** Verified against `remote.rowSecurity`.
+3. **Enabled State:** Checked only when explicitly defined.
+
+If differences exist, `databases.updateTable` is called. If the table is missing (404), it is created.
+
+<Callout type="info" emoji="🛡️">
+  **Race-Condition Safety:** Simultaneous creation attempts result in `409
+  Conflict`. Lazy Appwrite silently accepts this, ensuring idempotent creation.
+</Callout>
+
+---
+
+## LazyTable: The Runtime Model
+
+`LazyTable` is the developer-facing API returned by `db.model()`. It abstracts the sync engine.
+
+```ts
+await Users.create({ name: "Paul" });
+await Users.list({ active: true });
+await Users.update("id", { age: 22 });
+await Users.delete("id");
+```
+
+### Lazy Initialization
+
+- **Verification Cache:** `verifiedTables` Set prevents redundant network calls.
+- **Concurrent Safety:** Only the first call triggers sync; other calls wait on the same Promise in `pendingSyncs`.
+
+### Data Hygiene & Validation
+
+Payloads go through `validateAndClean(data)` before operations.
+
+| Feature             | Description                                                   |
+| ------------------- | ------------------------------------------------------------- |
+| **Strip Unknowns**  | Removes keys not in `schema.columns`. Logs a warning.         |
+| **Required Checks** | Throws `LazyError.validation` if a required field is missing. |
+| **Type Coercion**   | `"123"` → `123`, `"true"` → `true`, `"val"` → `["val"]`.      |
+| **Defaults**        | `_default` values are injected if missing.                    |
+
+---
+
+## CRUD API
+
+### Create
+
+```ts
+await Users.create({ name: "Mark", active: true });
+```
+
+### List
+
+Supports both object syntax and Appwrite `Query` syntax:
+
+```ts
+// Simple
+await Users.list({ active: true });
+
+// Advanced
+await Users.list([Query.greaterThan("age", 18), Query.orderDesc("created_at")]);
+```
+
+_Lazy-creates table if it doesn’t exist yet, returns empty array instead of crashing._
+
+### Find First
+
+```ts
+const user = await Users.findFirst({ email: "mark@example.com" });
+```
+
+### Get, Update, Delete
+
+```ts
+await Users.get("unique_id");
+await Users.update("unique_id", { age: 22 });
+await Users.delete("unique_id");
+```
+
+---
+
+## Error Handling
+
+All failures produce typed `LazyError` objects:
+
+- `LazyError.config`: Configuration/Auth issues.
+- `LazyError.validation`: Schema mismatch or missing fields.
+- `LazyError.appwrite`: Wraps native SDK errors.
+- `LazyError.timeout`: Operation exceeded time limit.
+
+```ts
+try {
+  await Users.create(...);
+} catch (err) {
+  if (err.type === 'VALIDATION') {
+    // Handle missing fields
+  }
+}
+```
+
+---
+
+## Summary
+
+Lazy Appwrite’s table layer provides:
+
+- **Developer Ergonomics:** Zero manual table creation.
+- **Robustness:** Concurrency-safe lazy creation.
+- **Reliability:** Retry logic and drift detection.
+- **Hygiene:** Validation, ghost field stripping, and type coercion.

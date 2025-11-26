@@ -1,0 +1,118 @@
+import { Callout } from "nextra/components";
+
+# Indexes
+
+In Appwrite, you cannot query a column (e.g., filtering by `email`) unless you have created an **Index** for it.
+
+Lazy Appwrite makes managing indexes painless by handling the complex timing and synchronization logic automatically.
+
+## Defining Indexes
+
+Indexes are defined in the `indexes` array within your `TableSchema`.
+
+```typescript
+import { TableSchema, IndexType } from "lazy-appwrite";
+
+export const PostSchema: TableSchema = {
+  id: "posts",
+  name: "Posts",
+  columns: [
+    { key: "category", type: ColumnType.String, size: 50, required: true },
+    { key: "title", type: ColumnType.String, size: 200, required: true },
+    { key: "body", type: ColumnType.String, size: 5000, required: false },
+  ],
+  indexes: [
+    // 1. Standard Key (Fast lookup)
+    {
+      key: "idx_category",
+      type: IndexType.Key,
+      columns: ["category"],
+    },
+    // 2. Fulltext Search (Search engine)
+    {
+      key: "idx_search",
+      type: IndexType.Fulltext,
+      columns: ["title", "body"],
+    },
+  ],
+};
+```
+
+---
+
+## Supported Types
+
+| Type                 | Description             | Use Case                                                    |
+| :------------------- | :---------------------- | :---------------------------------------------------------- |
+| `IndexType.Key`      | Standard B-Tree index.  | Filtering (`equal`, `notEqual`) and Sorting.                |
+| `IndexType.Unique`   | Enforces unique values. | Usernames, Emails, SKUs.                                    |
+| `IndexType.Fulltext` | Advanced text search.   | Searching words inside long text blocks (`search`).         |
+| `IndexType.Spatial`  | Geo-location index.     | Radius queries (`near`, `within`) on Point/Polygon columns. |
+
+---
+
+## The "Smart Wait" Engine
+
+One of the most common crashes in the standard Appwrite SDK happens when you create a column and immediately try to index it.
+
+> **Error:** Attribute not found or not available.
+
+Appwrite attributes are created asynchronously. They enter a `processing` state for a few milliseconds (or seconds) before becoming `available`.
+
+**Lazy Appwrite solves this:**
+
+1.  **Detection:** Before creating an index, it checks the status of every column involved.
+2.  **Polling:** If a column is `processing`, the library pauses execution and polls the API every 2 seconds.
+3.  **Creation:** Once all columns are `available`, it creates the index safely.
+
+<Callout type="info" emoji="⏳">
+  **Impact:** You might see your startup time take an extra 1-3 seconds the
+  _first_ time you deploy a new schema. This is the library waiting for the
+  server to catch up so your app doesn't crash.
+</Callout>
+
+---
+
+## Self-Healing Features
+
+### Ghost Index Cleanup
+
+Sometimes, an index creation fails halfway through (e.g., server restart), leaving the index in a `failed` or `stuck` state in the Appwrite Console.
+
+- **Standard Behavior:** You have to go to the Console, delete the broken index, and try again.
+- **Lazy Appwrite:** Detects the `failed` status, automatically **deletes** the zombie index, and tries to create it again fresh.
+
+### Schema Drift
+
+If you change the definition of an index in your code, the library updates the database.
+
+```typescript
+// Old Code
+{ key: "idx_user", type: IndexType.Key, columns: ["username"] }
+
+// New Code (Changed to Unique)
+{ key: "idx_user", type: IndexType.Unique, columns: ["username"] }
+```
+
+**Result:** The library detects the type mismatch, drops the old `Key` index, and creates a new `Unique` index.
+
+---
+
+## Spatial Indexes (Geo)
+
+Spatial indexes require special handling because they do not support sorting orders (ASC/DESC). The library handles this nuance for you automatically.
+
+```typescript
+import { ColumnType, IndexType } from "lazy-appwrite";
+
+const StoreSchema = {
+  columns: [{ key: "location", type: ColumnType.Point, required: true }],
+  indexes: [
+    {
+      key: "idx_location",
+      type: IndexType.Spatial, // Library knows to omit 'orders' parameter
+      columns: ["location"],
+    },
+  ],
+};
+```

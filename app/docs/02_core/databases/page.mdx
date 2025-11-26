@@ -1,0 +1,248 @@
+import { Callout } from "nextra/components";
+
+# Databases
+
+In Lazy Appwrite, a **Database** is a logical container for your Collections (Tables).  
+Unlike the standard Appwrite SDK, the Lazy API operates declaratively:
+
+> **“If I reference this database in code, ensure it exists — automatically, safely, and efficiently.”**
+
+This forms the core of the **Lazy Sync Engine**, allowing full infrastructure creation at runtime with zero manual setup.
+
+---
+
+# Initialization
+
+You never instantiate a database class manually. You obtain it from the factory:
+
+```ts
+// lib/appwrite.ts
+import { LazyAppwrite } from "lazy-appwrite";
+
+const app = LazyAppwrite.createAdminClient({ ...config });
+
+// 👇 Returns a LazyDatabase wrapper.
+export const db = app.getDatabase("my-main-db", "Main Database");
+```
+
+## Parameters
+
+| Parameter      | Type     | Description                                            |
+| -------------- | -------- | ------------------------------------------------------ |
+| `databaseId`   | `string` | Deterministic unique ID. **Do not use** `ID.unique()`. |
+| `databaseName` | `string` | The human-readable name created in Appwrite if needed. |
+
+---
+
+# How Lazy Creation Works
+
+The `LazyDatabase` wrapper does not create anything when you declare it.  
+Synchronization happens only when a **model** (collection) inside the database is used.
+
+### Lifecycle of a Database Sync
+
+1. **Trigger:** You call something like `await Users.create({...})`.
+2. **Connectivity Check:** `verifyConnection()` ensures the credentials & endpoint are valid.
+3. **Cache Check:** We check `verifiedDatabases` — an in-memory sync set.
+4. **Existence Check:** The library calls `databases.get(databaseId)`.
+5. **Auto-Creation:**
+   - On **404**, the DB is created with your provided name.
+   - On success, nothing changes.
+6. **Cache Update:** The database ID is added to the verification cache.
+
+<Callout type="info" emoji="⚡">
+  After the first sync during a cold start, the database check will **never run
+  again** during the same runtime. This makes Lazy Appwrite extremely fast on
+  warm requests.
+</Callout>
+
+---
+
+# Connectivity Health Check (Critical)
+
+Before any infrastructure sync happens, Lazy Appwrite performs a **global health check**:
+
+```ts
+await databases.list({ queries: [Query.limit(1)] });
+```
+
+If it fails:
+
+- ❌ A single error is thrown:  
+  **`LazyError.CONFIG: "Critical: Invalid Config Credentials or Endpoint"`**
+- ❌ No partial infrastructure is created
+- ❌ No model or database sync runs
+
+This ensures:
+
+- No noisy “Permission Denied” loops
+- No half-created infrastructure
+- Clear debugging output
+
+---
+
+# Automatic Naming Normalization
+
+Lazy Appwrite ensures consistent and stable Database IDs:
+
+- IDs must be **deterministic** (e.g., `"my-main-db"`, never `ID.unique()`).
+- Names can change freely — Appwrite uses them only for UI labels.
+
+This prevents a class of bugs where infrastructure diverges due to accidental ID regeneration.
+
+---
+
+# Internal Caching & Sync Guarantees
+
+Each LazyDatabase instance maintains internal caches:
+
+### `verifiedDatabases`
+
+- Ensures database existence is checked only **once per runtime**.
+
+### `verifiedTables`
+
+- Prevents repeated tables checks (covered in the Tables documentation).
+
+### `pendingSyncs`
+
+- Guarantees that **parallel requests** do not cause duplicate create operations.
+
+Example:
+
+```
+POST /signup  (cold start)
+POST /signup  (arrives 20ms later)
+```
+
+The first request triggers DB creation.  
+The second request **waits** for the sync to finish — safely.
+
+<Callout type="info">
+  Lazy Appwrite has built-in “sync locking” using promises. This protects your
+  database from race conditions in serverless environments.
+</Callout>
+
+---
+
+# Ordering Guarantees
+
+Lazy Appwrite always follows this order:
+
+1. Verify connection
+2. Ensure database exists
+3. Ensure table exists
+4. Ensure indexes exist
+5. Perform the user operation
+
+This ensures:
+
+- No operation runs before infrastructure is valid.
+- No table is created before the database.
+- No index is created before a table.
+
+This ordering matches the contract defined by your schemas.
+
+---
+
+# Cross-Database Architecture
+
+Lazy Appwrite fully supports multi-database applications.
+
+```ts
+const app = LazyAppwrite.createAdminClient({ ... });
+
+// Primary app data
+const appDb = app.getDatabase("app-data", "Application Data");
+export const Users = appDb.model(UserSchema);
+export const Posts = appDb.model(PostSchema);
+
+// Logs database
+const logsDb = app.getDatabase("system-logs", "System Logs");
+export const AccessLogs = logsDb.model(LogSchema);
+export const ErrorLogs = logsDb.model(ErrorSchema);
+```
+
+Each database:
+
+- Has its own sync lifecycle
+- Has its own cache
+- Has its own locking mechanisms
+- Is fully isolated from other DB operations
+
+---
+
+# Serverless & Cold Start Notes
+
+Because Lazy Appwrite performs sync **only on cold starts**, it is designed for:
+
+- Vercel Serverless Functions
+- Cloudflare Workers
+- AWS Lambda
+- Netlify Edge
+- Bun/Node edge runtimes
+
+Cold start behavior:
+
+- First request performs all infrastructure sync
+- All subsequent requests are as fast as native SDK calls
+- Parallel cold-start requests are locked safely
+
+---
+
+# Verbose Debug Mode
+
+If you enable:
+
+```ts
+verbose: true;
+```
+
+You get structured logs such as:
+
+```
+[Lazy] Checking database 'my-main-db'...
+[Lazy] Creating Database: my-main-db ✓
+[Lazy] Database sync complete.
+```
+
+This is extremely useful during:
+
+- First-time deployments
+- CI/CD migrations
+- Local development
+
+In production, disable it for performance.
+
+---
+
+# Edge Runtime Compatibility
+
+Lazy Appwrite avoids:
+
+- Node-only APIs
+- File system access
+- Heavy global state
+
+This makes it compatible with:
+
+- Vercel Edge
+- Cloudflare Workers
+- Deno Deploy
+- Bun Edge
+
+## And ensures consistent behavior between runtimes.
+
+# Summary
+
+Lazy Appwrite’s Database Layer provides:
+
+- **Declarative infrastructure** (DB created on first use)
+- **Connection health checks**
+- **Race-condition-free sync locking**
+- **Cross-database support**
+- **Fast warm performance**
+- **Serverless and Edge-ready runtime model**
+- **Friendly debug introspection**
+
+With this foundation, collections (Tables) can safely and automatically self-manage under each database.

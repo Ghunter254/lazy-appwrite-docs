@@ -1,0 +1,84 @@
+import { Callout } from "nextra/components";
+
+# Lazy Appwrite
+
+**Stop clicking around the Console. Start coding.**
+
+A declarative, self-healing SDK for Appwrite that handles database creation, syncing, and typed queries automatically.
+
+<div className="mt-8 flex gap-4">
+  <a
+    href="/docs/guide/getting-started"
+    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition no-underline"
+  >
+    Get Started
+  </a>
+  <a
+    href="https://github.com/Ghunter254/lazy-appwrite"
+    className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 transition no-underline"
+  >
+    GitHub
+  </a>
+</div>
+
+<br />
+
+<Callout type="info" emoji="ℹ️">
+  This library is currently in **Alpha v0.4.0**.
+</Callout>
+
+---
+
+## The Philosophy
+
+Appwrite is amazing, but managing databases via the Console UI scales poorly.
+Every time you add a feature, you have to:
+
+1. Click "Create Attribute".
+2. Type the key.
+3. Select the type.
+4. **Repeat** for every environment (Local, Staging, Prod).
+
+**Lazy Appwrite** flips this model. Your code _is_ the database. If your code says a column exists, this library ensures it exists before you write data to it.
+
+## Key Features
+
+### Lazy Infrastructure
+
+Define your schema in TypeScript. When your application starts or tries to write data, `lazy-appwrite` checks the schema.
+
+- **Missing Table?** Created instantly.
+- **Missing Column?** Added automatically.
+- **Missing Index?** Built on the fly.
+
+### Race-Condition Proof
+
+Built for the Serverless era. If your Next.js app spins up 50 containers simultaneously on a "Cold Start":
+
+- The **Mutex Engine** elects a leader.
+- The leader syncs the database.
+- The other 49 requests wait patiently.
+- **Zero `409 Conflict` errors.**
+
+### Self-Healing (Schema Drift)
+
+Did you change a `bio` field from **100** chars to **1000** chars in your code?
+
+- **Old Way:** Your app crashes because the DB limit is still 100.
+- **Lazy Way:** The library detects the drift and calls `updateAttribute` automatically.
+
+### Type Safety
+
+Stop guessing if a field is `camelCase` or `snake_case`. Your Schema definitions drive your TypeScript interfaces.
+
+```typescript
+// 1. Define
+const UserSchema = {
+  columns: [{ key: "username", type: ColumnType.String, required: true }],
+};
+
+// 2. Use (Auto-completed!)
+await Users.create({
+  username: "LazyDev", // TypeScript knows this exists
+});
+```

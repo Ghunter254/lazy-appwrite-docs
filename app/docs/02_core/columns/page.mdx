@@ -1,0 +1,190 @@
+import { Callout, Tabs, Tab } from "nextra/components";
+
+# Columns
+
+In Lazy Appwrite, columns are defined strictly in TypeScript using the `ColumnSchema` interface.
+
+Unlike the Appwrite Console where you click dropdowns, here you define the shape of your data in code. The library ensures the database matches your definition.
+
+## Defining Columns
+
+Columns are an array inside your `TableSchema`. Every column requires a `key` (the ID) and a `type`.
+
+```typescript
+import { TableSchema, ColumnType } from "lazy-appwrite";
+
+export const ProductSchema: TableSchema = {
+  id: "products",
+  name: "Products",
+  columns: [
+    // 1. Simple String
+    {
+      key: "name",
+      type: ColumnType.String,
+      size: 255,
+      required: true,
+    },
+    // 2. Integer with Default
+    {
+      key: "stock",
+      type: ColumnType.Integer,
+      required: false,
+      _default: 0,
+    },
+    // 3. Array of Strings (Tags)
+    {
+      key: "tags",
+      type: ColumnType.String,
+      size: 50,
+      required: false,
+      array: true,
+    },
+  ],
+};
+```
+
+---
+
+## Supported Types
+
+Lazy Appwrite supports all native Appwrite attribute types plus specific logic for Relationships and Geometry.
+
+### Primitives
+
+| Type                 | Specific Properties | Description                                    |
+| :------------------- | :------------------ | :--------------------------------------------- |
+| `ColumnType.String`  | `size` (Required)   | Max allowed size in chars. Max: 1,073,741,824. |
+| `ColumnType.Integer` | `min`, `max`        | 32-bit integer.                                |
+| `ColumnType.Float`   | `min`, `max`        | Floating point number.                         |
+| `ColumnType.Boolean` | -                   | True / False.                                  |
+
+### Formats
+
+These are specialized strings validated by Appwrite (and locally by Lazy Appwrite).
+
+| Type                  | Regex Validation        |
+| :-------------------- | :---------------------- |
+| `ColumnType.Email`    | Validates email format. |
+| `ColumnType.Url`      | Validates valid URL.    |
+| `ColumnType.Ip`       | Validates IPv4/IPv6.    |
+| `ColumnType.Datetime` | ISO 8601 string.        |
+
+### Enums
+
+Enums restrict the column to a specific set of string values.
+
+```typescript
+{
+  key: "status",
+  type: ColumnType.Enum,
+  elements: ["draft", "published", "archived"], // Allowed values
+  required: true
+}
+```
+
+<Callout type="info" emoji="🩹">
+  **Self-Healing:** If you add a new option (e.g., `"deleted";`) to your code
+  later, the library detects the change and automatically calls
+  `updateEnumAttribute` to add it to the live database.
+</Callout>
+
+### Relationships
+
+Relationships link two tables together.
+
+```typescript
+import { RelationshipType, onDelete } from "lazy-appwrite";
+
+{
+  key: "author",
+  type: ColumnType.Relationship,
+  relatedTableId: "users", // The ID of the other TableSchema
+  relationType: RelationshipType.ManyToOne,
+  twoWay: true,
+  twoWayKey: "posts", // The attribute name on the User table
+  onDelete: onDelete.SetNull
+}
+```
+
+### Geo-Spatial
+
+Used for location-based data. Requires a `Spatial` index to search efficiently.
+
+```typescript
+{
+  key: "location",
+  type: ColumnType.Point, // [longitude, latitude]
+  required: true
+}
+```
+
+---
+
+## Smart Features
+
+The `ColumnManager` does more than just create columns. It actively manages data integrity.
+
+### 1\. Smart Casting (Type Coercion)
+
+Before data is sent to the database, the library attempts to safely convert mismatched types. This is useful for handling raw form data.
+
+```typescript
+// Schema: { key: "age", type: ColumnType.Integer }
+
+// Input (String)
+await Users.create({ age: "25" });
+
+// Library Action
+// "25" -> 25 (Integer)
+// Success
+```
+
+| Input Type | Target Type | Action               | Example             |
+| :--------- | :---------- | :------------------- | :------------------ |
+| `String`   | `Integer`   | Parse Int            | `"42"` → `42`       |
+| `String`   | `Boolean`   | Check "true"/"false" | `"true"` → `true`   |
+| `Scalar`   | `Array`     | Wrap in array        | `"tag"` → `["tag"]` |
+
+### 2\. Schema Drift & Safe Upgrades
+
+If you change your TypeScript definition, the library attempts to update the database on the next run.
+
+#### Safe Upgrades (Auto-Fixed)
+
+These changes happen automatically without data loss:
+
+1.  **Expanding String Size:** Changing `size: 50` to `size: 1000`.
+2.  **Adding Enum Options:** Adding `"cancelled"` to an order status enum.
+
+#### Fatal Conflicts (Error Thrown)
+
+These changes require manual intervention because they imply fundamental data restructuring:
+
+1.  **Type Change:** Changing `String` to `Integer`.
+2.  **Array Toggle:** Changing `array: false` to `array: true`.
+
+If these are detected, `LazyError.validation` is thrown with instructions to delete the column manually in the Console.
+
+---
+
+## Common Pitfalls
+
+### 1\. String Size Limits
+
+Appwrite requires a size for all strings.
+
+- **Don't:** `{ type: ColumnType.String }` (Error: missing size)
+- **Do:** `{ type: ColumnType.String, size: 255 }`
+
+### 2\. Relationship Order
+
+When defining a relationship, the `relatedTableId` must refer to a table that **already exists** or is being created in the same flow.
+
+- **Tip:** Lazy Appwrite creates tables sequentially. If `Posts` depends on `Users`, ensure `Users` is instantiated/used first, or simply define both schemas. The library's lazy nature usually handles this, as the relationship attribute isn't created until the table is.
+
+### 3\. Required vs Default
+
+You cannot have both `required: true` AND a `_default` value.
+
+- **Logic:** If it has a default, it is optional by definition.
+- **TypeScript:** The `ColumnSchema` type will throw a compilation error if you try this.

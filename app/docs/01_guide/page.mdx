@@ -1,0 +1,125 @@
+import { Tabs, Callout, Steps } from "nextra/components";
+
+# Getting Started
+
+Follow this guide to set up Lazy Appwrite in your Node.js or Serverless project.
+
+## Installation
+
+Lazy Appwrite sits on top of the official SDK. You need to install both.
+
+<Tabs items={["npm", "pnpm", "yarn", "bun"]}>
+  <Tabs.Tab>```bash npm install lazy-appwrite node-appwrite ```</Tabs.Tab>
+  <Tabs.Tab>```bash pnpm add lazy-appwrite node-appwrite ```</Tabs.Tab>
+  <Tabs.Tab>```bash yarn add lazy-appwrite node-appwrite ```</Tabs.Tab>
+  <Tabs.Tab>```bash bun add lazy-appwrite node-appwrite ```</Tabs.Tab>
+</Tabs>
+
+---
+
+## Setup Guide
+
+<Steps>
+
+### Initialize the Client
+
+Create a central file (e.g., `lib/appwrite.ts`) to manage your connection.
+You will need your **Project ID**, **API Key**, and **Endpoint** from the [Appwrite Console](https://cloud.appwrite.io).
+
+<Callout type="warning">
+  Never expose your **API Key** to the client-side (browser). This code should
+  run on your server (Node.js, API Routes, or Server Actions).
+</Callout>
+
+```typescript filename="lib/appwrite.ts"
+import { LazyAppwrite } from "lazy-appwrite";
+
+// 1. Create the App Instance
+const app = LazyAppwrite.createAdminClient({
+  endpoint: process.env.APPWRITE_ENDPOINT || "https://cloud.appwrite.io/v1",
+  projectId: process.env.APPWRITE_PROJECT_ID!,
+  apiKey: process.env.APPWRITE_API_KEY!,
+  verbose: process.env.NODE_ENV === "development", // Logs "Creating Table..." only in dev
+});
+
+// 2. Select your Database
+// If "my-main-db" doesn't exist, it will be created automatically.
+const db = app.getDatabase("my-main-db", "Main Database");
+
+export { db };
+```
+
+### Define a Schema
+
+In a separate file (e.g., `lib/schemas.ts`), define the structure of your data.
+This is the "Source of Truth" for your application.
+
+```typescript filename="lib/schemas.ts"
+import { TableSchema, ColumnType, IndexType } from "lazy-appwrite";
+
+export const UserSchema: TableSchema = {
+  id: "users",
+  name: "Users",
+  columns: [
+    { key: "username", type: ColumnType.String, size: 50, required: true },
+    { key: "age", type: ColumnType.Integer, required: false, _default: 18 },
+    {
+      key: "is_active",
+      type: ColumnType.Boolean,
+      required: true,
+      _default: true,
+    },
+  ],
+  indexes: [
+    { key: "idx_username", type: IndexType.Unique, columns: ["username"] },
+  ],
+};
+```
+
+### Create the Model
+
+Bind your Schema to your Database instance. This creates a robust, typed repository for interacting with that collection.
+
+```typescript filename="lib/models.ts"
+import { db } from "./appwrite";
+import { UserSchema } from "./schemas";
+
+export const Users = db.model(UserSchema);
+```
+
+</Steps>
+
+---
+
+## Usage
+
+Now you can use the `Users` model in your application logic.
+
+### Creating Data (Lazy Magic)
+
+```typescript
+import { Users } from "@/lib/models";
+
+async function signup() {
+  const user = await Users.create({
+    username: "LazyDev",
+    age: 25,
+  });
+
+  console.log(`Created User ID: ${user.$id}`);
+}
+```
+
+### Reading Data
+
+```typescript
+// Find all active users
+const activeUsers = await Users.list({
+  is_active: true,
+});
+
+// Advanced queries
+import { Query } from "node-appwrite";
+
+const adults = await Users.list([Query.greaterThan("age", 18)]);
+```
