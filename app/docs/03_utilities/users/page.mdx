@@ -1,0 +1,247 @@
+# Users Utilities
+
+The `utils.users` namespace provides convenience helpers for interacting with **Appwrite Users API**.
+These abstractions handle common user operations such as lookup, creation, updates, preferences, and deletion — all wrapped with retries, logging, and consistent error-handling using `LazyError`.
+
+These utilities work using the Appwrite **Admin API Key**, since user management requires server permissions.
+
+---
+
+## Setup
+
+Users utilities are part of the `LazyUtils` toolbox.
+
+```ts
+import { LazyAppwrite, Logger } from "lazy-appwrite";
+import { LazyUtils } from "lazy-appwrite/utils";
+
+// 1. Initialize core client
+const app = LazyAppwrite.createAdminClient({
+  projectId: "YOUR_PROJECT_ID",
+  endpoint: "YOUR_ENDPOINT",
+  apiKey: "YOUR_API_KEY", // Required for users API
+});
+
+// 2. Initialize Utils
+const logger = new Logger(true);
+const utils = new LazyUtils(app.client, logger);
+
+// Access
+const users = utils.users;
+```
+
+---
+
+# Features Overview
+
+The Users Utilities provide the following capabilities:
+
+### ✔ Find Users
+
+- `findByEmail(email)`
+- `getById(userId)`
+
+### ✔ Create or Upsert
+
+- `getOrCreateUser(email, password?, name?)`
+
+### ✔ Preferences
+
+- `getUserPreferences(userId)`
+
+### ✔ Listing and Searching
+
+- `listUsers(queries?, search?, total?)`
+
+### ✔ Updating Users
+
+- Name, email, phone
+- Password
+- Verification flags
+- Preferences
+- Labels (with optional merge)
+
+### ✔ Delete Users
+
+- Safe delete that does not throw on 404
+
+---
+
+# Methods
+
+## `findByEmail(email)`
+
+Returns the first user matching the given email or `null` if none exist.
+Does **not** throw a 404.
+
+```ts
+const user = await users.findByEmail("mark@example.com");
+
+if (user) console.log("Found:", user.$id);
+```
+
+Useful for login, signup, and service-to-service workflows.
+
+---
+
+## `getById(userId)`
+
+Fetches a user by their Appwrite ID.
+
+```ts
+const user = await users.getById("user_123");
+
+if (!user) console.log("No user found");
+```
+
+---
+
+## `getOrCreateUser(email, password?, name?)`
+
+A highly convenient helper for workflows where:
+
+- Users might already exist
+- You want to auto-create missing users
+- You want to avoid race conditions (retry on 409)
+
+```ts
+const { user, created } = await users.getOrCreateUser(
+  "new@example.com",
+  "password123",
+  "New User"
+);
+
+console.log(created ? "User created" : "User already existed");
+```
+
+### Behavior
+
+- If user exists → returns `{ created: false }`
+- If user doesn’t exist → creates and returns `{ created: true }`
+- If a race happens → automatically retries
+
+### Throws
+
+- Validation error if you forget password for new creation
+- Appwrite errors for unexpected failures
+
+---
+
+## `getUserPreferences(userId)`
+
+Fetches the preferences object for a user.
+
+```ts
+const prefs = await users.getUserPreferences("user_123");
+console.log("User preferences:", prefs);
+```
+
+Preferences support any JSON-serializable shape.
+
+---
+
+## `listUsers(queries?, search?, total?)`
+
+Lists users with optional:
+
+- Appwrite queries
+- Search term
+- Total count flag
+
+```ts
+const result = await users.listUsers(
+  [Query.equal("labels", ["pro"])],
+  "john",
+  true
+);
+
+console.log(result.users, "Total:", result.total);
+```
+
+---
+
+# Updating Users
+
+## `update(userId, options)`
+
+A unified update function that accepts a large flexible options object:
+
+```ts
+await users.update("user_123", {
+  name: "Mark Updated",
+  email: "new@example.com",
+  phone: "+254700000000",
+  blocked: false,
+  emailVerified: true,
+  prefs: { theme: "dark" },
+
+  labels: ["vip", "beta"],
+  mergeLabels: true, // Optional: merge instead of replace
+});
+```
+
+### Supported update fields
+
+| Field           | Action                                                  |
+| --------------- | ------------------------------------------------------- |
+| `name`          | Updates user name                                       |
+| `email`         | Updates email                                           |
+| `phone`         | Updates phone                                           |
+| `password`      | Updates password                                        |
+| `blocked`       | Sets user status active/inactive                        |
+| `emailVerified` | Toggles email verification                              |
+| `phoneVerified` | Toggles phone verification                              |
+| `prefs`         | Replaces preferences                                    |
+| `labels`        | Sets or merges labels                                   |
+| `mergeLabels`   | If true → merges existing labels instead of overwriting |
+
+### Notes
+
+- Executes operations in parallel
+- Automatically logs progress
+- Skips empty updates
+- Gracefully handles Appwrite errors
+
+---
+
+# Deleting Users
+
+## `deleteUser(userId)`
+
+Deletes a user by ID.
+
+```ts
+const deleted = await users.deleteUser("user_123");
+
+if (deleted) console.log("User removed");
+else console.log("User did not exist");
+```
+
+### Behavior
+
+- Returns `true` on success
+- Returns `false` if user wasn't found (`404`)
+- Throws for all other Appwrite errors
+- Assumes you have already deleted related resources (documents, files, etc.)
+
+---
+
+# Best Practices
+
+### Use Admin API Key
+
+All user operations must come from server-side environments.
+
+### Use `getOrCreateUser()` for Idempotent Workflows
+
+Avoid race-condition errors in queue workers, CRON jobs, or OAuth imports.
+
+### Use `labels` for User Segmentation
+
+Your `update()` helper supports label merging — this is perfect for tagging users with roles, subscription tiers, cohorts, etc.
+
+### Cache user lookups when possible
+
+For high-traffic apps, cache findByEmail lookups for a few seconds.
+
+---

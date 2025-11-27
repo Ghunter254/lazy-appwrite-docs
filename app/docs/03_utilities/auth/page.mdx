@@ -1,0 +1,156 @@
+import { Callout, Steps } from "nextra/components";
+
+# Auth Utilities
+
+The `utils.auth` namespace provides helper functions to manage **Authentication and Sessions** within your Node.js or Server-Side Rendering (SSR) environment.
+
+Because this library is built on `node-appwrite`, these utilities are designed to handle sessions manually (passing tokens/secrets) rather than relying on browser cookies automatically.
+
+---
+
+## Setup
+
+The Auth utilities are part of the `LazyUtils` toolbox.
+
+```typescript
+import { LazyAppwrite, Logger } from "lazy-appwrite";
+import { LazyUtils } from "lazy-appwrite/utils";
+
+// 1. Initialize Core
+const app = LazyAppwrite.createAdminClient({
+  projectId: "YOUR_PROJECT_ID",
+  endpoint: "YOUR_ENDPOINT",
+  apiKey: "...", // Required for utils.users
+});
+
+// 2. Initialize Utils
+const logger = new Logger(true);
+const utils = new LazyUtils(app.client, logger);
+```
+
+---
+
+## Authentication Flows
+
+These methods handle the creation of users and sessions.
+
+### Login
+
+Creates a new session using email and password.
+
+```typescript
+const session = await utils.auth.login("mark@example.com", "password123");
+
+console.log("Session Secret:", session.secret);
+// You usually save this secret to a cookie for SSR
+```
+
+### Register
+
+Creates a new user account.
+
+```typescript
+const user = await utils.auth.register(
+  "mark@example.com",
+  "password123",
+  "Mark"
+);
+```
+
+### Login or Register (Frictionless)
+
+This is a powerful helper for "Get Started" flows. It attempts to log the user in. If the account doesn't exist (invalid credentials), it attempts to register them and _then_ log them in.
+
+```typescript
+// 1. Try Login -> Fail? -> Register -> Login
+const session = await utils.auth.loginOrRegister(
+  "new.user@example.com",
+  "password123",
+  "New User"
+);
+```
+
+<Callout type="info">
+  **Note:** If the user exists but the password is wrong, this method correctly
+  throws an "Invalid Credentials" error instead of trying to re-register.
+</Callout>
+
+---
+
+## Session Management
+
+Since `node-appwrite` is stateless, these methods require you to pass the **Session Secret** (usually stored in a cookie) to identify the user.
+
+### Get Current User (`getMe`)
+
+Retrieves the user object associated with a specific session secret.
+
+```typescript
+// Pass the secret returned from login() or from a cookie
+const user = await utils.auth.getMe(sessionSecret);
+
+if (user) {
+  console.log("Logged in as:", user.name);
+}
+```
+
+### Check Status (`isLoggedIn`)
+
+Returns `true` or `false` based on the validity of the session secret.
+
+```typescript
+const isValid = await utils.auth.isLoggedIn(sessionSecret);
+```
+
+### Logout
+
+Deletes the session.
+
+```typescript
+// Logout specific session
+await utils.auth.logout(sessionSecret);
+
+// Logout 'current' (if client has session set)
+await utils.auth.logout("current");
+```
+
+---
+
+## SSR & Next.js Integration
+
+The `fromRequest` helper is designed specifically for frameworks like **Next.js** or **SvelteKit** where you need to check authentication inside a Server Request (API Route or Server Action).
+
+It parses the Appwrite cookie, creates a temporary scoped client, and fetches the user.
+
+```typescript
+import { NextRequest, NextResponse } from "next/server";
+import { utils } from "@/lib/lazy";
+
+export async function GET(req: NextRequest) {
+  // 1. Extract session from cookies and fetch user
+  const { user, isAuthenticated, sessionToken } = await utils.auth.fromRequest(
+    req
+  );
+
+  if (!isAuthenticated) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // 2. Use the user object
+  return NextResponse.json({
+    message: `Welcome back, ${user.name}`,
+  });
+}
+```
+
+### Type Definition
+
+The `fromRequest` method returns an `AuthContext` object:
+
+```typescript
+interface AuthContext {
+  user: Models.User<Models.Preferences> | null;
+  sessionToken: string | null;
+  isAuthenticated: boolean;
+}
+```

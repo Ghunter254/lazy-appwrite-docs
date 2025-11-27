@@ -1,0 +1,102 @@
+import { Callout, Tabs, Tab } from "nextra/components";
+
+# Getting Started with Utilities
+
+Lazy Appwrite isn't just about databases. It provides a robust **"Toolbox"** of helpers for Authentication, User Management, and (soon) Storage.
+
+To keep your application bundle small, these utilities live in a separate subpath: `lazy-appwrite/utils`.
+
+---
+
+## The Philosophy
+
+The Utilities package is designed around **Security via Separation**.
+
+In standard Appwrite development, it is easy to accidentally use an Admin method (like listing users) in a Client application, causing security leaks or confusing errors.
+
+Lazy Appwrite splits these strictly:
+
+1.  **`utils.auth` (Client/Session):** Safe for browsers. Handles Login, Register, Magic Links.
+2.  **`utils.users` (Server/Admin):** Requires an API Key. Handles Blocking, Deleting, and Seeding users.
+
+---
+
+## Setup
+
+The Utilities are **decoupled** from the Core database logic. You must manually "glue" them to your Appwrite Client.
+
+### 1. Import and Initialize
+
+You instantiate `LazyUtils` by passing the `client` from your main `LazyAppwrite` instance.
+
+```typescript filename="lib/utils.ts"
+import { LazyAppwrite, Logger } from "lazy-appwrite";
+import { LazyUtils } from "lazy-appwrite/utils";
+
+// 1. Initialize your Core App (Admin or Client)
+const app = LazyAppwrite.createAdminClient({
+  projectId: "...",
+  apiKey: "...", // Required for utils.users
+  endpoint: "...",
+});
+
+// 2. Initialize Utilities
+// We pass the raw 'client' so the utils know how to connect.
+const logger = new Logger(true);
+export const utils = new LazyUtils(app.client, logger);
+```
+
+<Callout type="info" emoji="🧩">
+  **Why manual instantiation?** This allows **Tree Shaking**. If you only need
+  the Database features, you never import `lazy-appwrite/utils`, and that code
+  is excluded from your final production bundle.
+</Callout>
+
+---
+
+## The Two Namespaces
+
+Once initialized, you have access to two distinct sets of tools.
+
+### 1\. `utils.users` (Admin)
+
+**Context:** Server-Side (Node.js, API Routes).
+**Auth:** Requires an API Key with `users.read` and `users.write` scopes.
+
+Use this for building Admin Dashboards, Seeding Scripts, or backend logic.
+
+```typescript
+// ✅ Safe Idempotent Creation (Won't crash if user exists)
+const { user, created } = await utils.users.getOrCreate(
+  "admin@example.com",
+  "password123"
+);
+
+// 🛠️ Master Update (Parallelized)
+await utils.users.update(user.$id, {
+  name: "Super Admin",
+  blocked: false,
+  emailVerified: true,
+  labels: ["staff", "admin"],
+  mergeLabels: true, // Appends labels instead of overwriting
+});
+```
+
+### 2\. `utils.auth` (Session)
+
+**Context:** Client-Side (React, Vue, Svelte components).
+**Auth:** Uses the current browser Cookie/Session.
+
+Use this for building Login forms, Profile pages, or SSR checks.
+
+```typescript
+// ⚡ Frictionless Onboarding
+// Tries to Login. If account missing, Registers then Logs in.
+await utils.auth.loginOrRegister("new@user.com", "password123");
+
+// 🕵️‍♂️ Check Session
+const isLoggedIn = await utils.auth.isLoggedIn();
+
+// 👤 Get Profile
+const me = await utils.auth.getMe();
+```
