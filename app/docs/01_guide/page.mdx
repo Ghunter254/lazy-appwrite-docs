@@ -17,14 +17,40 @@ Lazy Appwrite sits on top of the official SDK. You need to install both.
 
 ---
 
-## Setup Guide
+## Quick Start (Recommended)
+
+The fastest way to scaffold your project is using the CLI.
+
+```bash
+npx lazy-appwrite init
+```
+
+This interactive command will:
+
+1.  Ask where to create your configuration file (default: `src/lib/appwrite.ts`).
+2.  Generate a production-ready Client setup.
+3.  Create a `lazy-examples/` folder with sample schemas and usage guides.
+
+**After running init:**
+Add your credentials to your `.env` file:
+
+```bash filename=".env"
+APPWRITE_ENDPOINT=[https://cloud.appwrite.io/v1](https://cloud.appwrite.io/v1)
+APPWRITE_PROJECT_ID=your_project_id
+APPWRITE_API_KEY=your_secret_api_key
+```
+
+---
+
+## Manual Setup
+
+If you prefer to configure everything from scratch, follow these steps.
 
 <Steps>
 
 ### Initialize the Client
 
 Create a central file (e.g., `lib/appwrite.ts`) to manage your connection.
-You will need your **Project ID**, **API Key**, and **Endpoint** from the [Appwrite Console](https://cloud.appwrite.io).
 
 <Callout type="warning">
   Never expose your **API Key** to the client-side (browser). This code should
@@ -36,7 +62,9 @@ import { LazyAppwrite } from "lazy-appwrite";
 
 // 1. Create the App Instance
 const app = LazyAppwrite.createAdminClient({
-  endpoint: process.env.APPWRITE_ENDPOINT || "https://cloud.appwrite.io/v1",
+  endpoint:
+    process.env.APPWRITE_ENDPOINT ||
+    "[https://cloud.appwrite.io/v1](https://cloud.appwrite.io/v1)",
   projectId: process.env.APPWRITE_PROJECT_ID!,
   apiKey: process.env.APPWRITE_API_KEY!,
   verbose: process.env.NODE_ENV === "development", // Logs "Creating Table..." only in dev
@@ -93,17 +121,19 @@ export const Users = db.model(UserSchema);
 
 ## Usage
 
-Now you can use the `Users` model in your application logic.
+Now you can use the `Users` model in your application logic. The first time you run a command, Lazy Appwrite will ensure the database infrastructure exists.
 
-### Creating Data (Lazy Magic)
+### Creating Data
 
 ```typescript
 import { Users } from "@/lib/models";
 
 async function signup() {
+  // Triggers Lazy Creation if table is missing
   const user = await Users.create({
     username: "LazyDev",
     age: 25,
+    // is_active defaults to true
   });
 
   console.log(`Created User ID: ${user.$id}`);
@@ -112,14 +142,16 @@ async function signup() {
 
 ### Reading Data
 
+We support a simplified query syntax for common operations.
+
 ```typescript
-// Find all active users
+// Find all active users (AND logic)
 const activeUsers = await Users.list({
   is_active: true,
 });
 
-// Advanced queries
-import { Query } from "node-appwrite";
+// Advanced queries using the raw SDK Query class
+import { Query } from "lazy-appwrite"; // Re-exported for convenience
 
 const adults = await Users.list([Query.greaterThan("age", 18)]);
 ```
