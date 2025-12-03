@@ -34,7 +34,7 @@ export default function LandingPage() {
         {/* --- HERO SECTION --- */}
         <div className="max-w-4xl mx-auto space-y-8 animate-fade-in-up">
           <div className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50/50 px-4 py-1.5 text-sm font-medium text-blue-800 dark:border-blue-800/50 dark:bg-blue-900/20 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors cursor-default">
-            🚀 Alpha v0.6.0 is live
+            🚀 v1.0.0 is live
           </div>
 
           <h1 className="text-6xl font-extrabold tracking-tight sm:text-8xl drop-shadow-sm">

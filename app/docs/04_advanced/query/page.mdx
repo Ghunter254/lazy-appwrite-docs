@@ -1,0 +1,129 @@
+import { Callout } from "nextra/components";
+
+# Queries
+
+Lazy Appwrite ships with a smarter, cleaner Query Engine.
+You can now write queries using a simple **object syntax** — no need to import `Query` or manually build strings.
+
+This feature aims to improve DX while staying fully compatible with Appwrite under the hood.
+
+---
+
+## What You Can Do
+
+### 1. Implicit Equality
+
+If you pass a primitive value, it becomes an equality check.
+
+```typescript
+await Users.list({
+  age: 25,
+  active: true,
+});
+```
+
+### 2. Mongo-Style Operators
+
+For advanced logic, you can specify operators using the `$` prefix.
+
+| Operator      | Maps To                     | Meaning                   |
+| :------------ | :-------------------------- | :------------------------ |
+| `$eq`         | `Query.equal`               | Equals                    |
+| `$ne`         | `Query.notEqual`            | Not equal                 |
+| `$gt`         | `Query.greaterThan`         | Greater than              |
+| `$gte`        | `Query.greaterThanEqual`    | Greater than or equal (≥) |
+| `$lt`         | `Query.lessThan`            | Less than                 |
+| `$lte`        | `Query.lessThanEqual`       | Less than or equal (≤)    |
+| `$search`     | `Query.search`              | Full-text search          |
+| `$startsWith` | `Query.startsWith`          | String prefix             |
+| `$endsWith`   | `Query.endsWith`            | String suffix             |
+| `$between`    | `Query.between`             | Range `[min, max]`        |
+| `$in`         | `Query.equal(key, [array])` | "IN" list                 |
+| `$isNull`     | `Query.isNull`              | Field is null             |
+| `$isNotNull`  | `Query.isNotNull`           | Field exists              |
+
+### Examples
+
+```typescript
+// Range
+await Products.list({
+  price: { $gte: 100, $lte: 500 },
+});
+
+// Search
+await Posts.list({
+  title: { $search: "lazy appwrite" },
+});
+
+// IN
+await Users.list({
+  status: { $in: ["active", "pending"] },
+});
+
+// Null
+await Logs.list({
+  error_code: { $isNotNull: true },
+});
+```
+
+---
+
+## Legacy Syntax (Still Supported)
+
+If you want the raw Appwrite SDK queries, you can still pass an array.
+
+```typescript
+import { Query } from "lazy-appwrite";
+
+await Users.list([Query.equal("role", "admin"), Query.orderDesc("$createdAt")]);
+```
+
+---
+
+## Limitations (Important)
+
+<Callout type="warning" emoji="⚠️">
+  Below is what **this version does NOT support** — don’t attempt it yet.
+</Callout>
+
+### No `$or` (Logical OR)
+
+Everything inside the object is combined using **AND**.
+
+```typescript
+// This works (AND)
+await Users.list({ age: { $gt: 18 }, active: true });
+
+// This does NOT work (no OR support yet)
+/*
+await Users.list({
+  $or: [{ age: { $gt: 18 } }, { active: true }],
+});
+*/
+```
+
+If you _must_ use OR, switch to the legacy array syntax `Query.or([...])`.
+
+### No Deep Nesting
+
+Only one operator level is supported.
+
+```typescript
+// NOT supported
+/*
+await Users.list({
+  meta: {
+    settings: { $eq: true },
+  },
+});
+*/
+```
+
+### Index Rules Still Apply
+
+Appwrite will throw errors for fields without indexes. Lazy Appwrite does not bypass any database restrictions.
+
+```typescript
+// Will fail if no index exists for `price`
+await Products.list({ price: { $gt: 100 } });
+```
