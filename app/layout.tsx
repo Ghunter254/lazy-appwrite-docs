@@ -1,6 +1,7 @@
 // app/layout.tsx
 import "nextra-theme-docs/style.css";
 import "./globals.css";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
   title: "Lazy Appwrite",
@@ -20,7 +21,10 @@ export default function RootLayout({
       style={{ colorScheme: "dark" }}
       suppressHydrationWarning
     >
-      <body className="bg-gray-950 text-gray-100">{children}</body>
+      <body className="bg-gray-950 text-gray-100">
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
