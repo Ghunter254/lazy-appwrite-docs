@@ -5,7 +5,7 @@ import { getPageMap } from "nextra/page-map";
 
 const banner = (
   <Banner storageKey="lazy-appwrite-release">
-    Lazy Appwrite v1.0.0 is out! 🎉
+    Lazy Appwrite v1.1.0 is out! 🎉
   </Banner>
 );
 

@@ -8,11 +8,28 @@ Follow this guide to set up Lazy Appwrite in your Node.js or Serverless project.
 
 Lazy Appwrite sits on top of the official SDK. You need to install both.
 
+{/* prettier-ignore */}
 <Tabs items={["npm", "pnpm", "yarn", "bun"]}>
-  <Tabs.Tab>```bash npm install lazy-appwrite node-appwrite ```</Tabs.Tab>
-  <Tabs.Tab>```bash pnpm add lazy-appwrite node-appwrite ```</Tabs.Tab>
-  <Tabs.Tab>```bash yarn add lazy-appwrite node-appwrite ```</Tabs.Tab>
-  <Tabs.Tab>```bash bun add lazy-appwrite node-appwrite ```</Tabs.Tab>
+  <Tabs.Tab>
+    ```bash 
+    npm install lazy-appwrite node-appwrite 
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash 
+    pnpm add lazy-appwrite node-appwrite 
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash 
+    yarn add lazy-appwrite node-appwrite 
+    ```
+  </Tabs.Tab>
+  <Tabs.Tab>
+    ```bash 
+    bun add lazy-appwrite node-appwrite 
+    ```
+  </Tabs.Tab>
 </Tabs>
 
 ---
@@ -119,6 +136,45 @@ export const Users = db.model(UserSchema);
 
 ---
 
+## Existing Projects (Reverse Engineering)
+
+If you already have a database created in the Appwrite Console, you don't need to write schemas manually. You can **Pull** your existing structure into TypeScript.
+
+### 1. Prerequisites
+
+Ensure you have a `.env` file in your project root with your Admin credentials:
+
+```bash filename=".env"
+APPWRITE_ENDPOINT=[https://cloud.appwrite.io/v1](https://cloud.appwrite.io/v1)
+APPWRITE_PROJECT_ID=...
+APPWRITE_API_KEY=...
+```
+
+### 2. Run the Pull Command
+
+```bash
+npx lazy-appwrite pull
+```
+
+### 3. Follow the Prompts
+
+The CLI will read your environment variables and ask you:
+
+1.  **Which Database** to pull (if you have multiple).
+2.  **Where to save** the schema file (default: `src/lib/schemas.ts`).
+
+<Callout type="info" emoji="✨">
+**What gets generated?**
+The CLI automatically converts all your Collections into `TableSchema` objects, preserving:
+
+- Column Types (Strings, Integers, Booleans)
+- Advanced Types (Enums, Relationships, Geo-location)
+- Configuration (Permissions, Indexes, Defaults)
+
+</Callout>
+
+Note: Make sure to create Models after schema generated.
+
 ## Usage
 
 Now you can use the `Users` model in your application logic. The first time you run a command, Lazy Appwrite will ensure the database infrastructure exists.
@@ -154,4 +210,8 @@ const activeUsers = await Users.list({
 import { Query } from "lazy-appwrite"; // Re-exported for convenience
 
 const adults = await Users.list([Query.greaterThan("age", 18)]);
+```
+
+```
+
 ```
